@@ -21,6 +21,7 @@ jobs:
     env:
       Solution_Name: WebApp.sln                        # Replace with your solution name, i.e. MyWpfApp.sln.
       Configuration: Release
+      Wap_Project_Path: ContosoApp.Package\ContosoApp.Package.wapproj
     steps:
     - name: Checkout
       uses: actions/checkout@v3
