@@ -24,7 +24,10 @@ jobs:
 
     - name: Restore NuGet packages
       run: nuget restore ${{ env.SOLUTION }}
-
+      
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v1.1
+      
     - name: Build Solution
       run: |
         msbuild ${{ env.SOLUTION }} /p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=false /p:SkipInvalidConfigurations=true /p:PackageLocation="${{ github.workspace }}"
