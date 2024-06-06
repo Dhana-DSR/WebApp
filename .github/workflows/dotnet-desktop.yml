@@ -1,5 +1,4 @@
-
-name: .NET Core Desktop
+name: Build and Publish
 
 on:
   push:
@@ -8,59 +7,54 @@ on:
     branches: [ "main" ]
 
 jobs:
-
   build:
+    runs-on: windows-latest
 
-    strategy:
-      matrix:
-        configuration: [Debug, Release]
-
-    runs-on: windows-latest  # For a list of available runner types, refer to
-                             # https://help.github.com/en/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
-
-    env:
-      Solution_Name: WebApp.sln                        # Replace with your solution name, i.e. MyWpfApp.sln.
-      Configuration: Release
-      Wap_Project_Path: ContosoApp.Package\ContosoApp.Package.wapproj
     steps:
-    - name: Checkout
-      uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
+      - name: Checkout repository
+        uses: actions/checkout@v2
 
-    # Install the .NET Core workload
-    - name: Install .NET Core
-      uses: actions/setup-dotnet@v3
-      with:
-        dotnet-version: 6.0.x
+      - name: Set UTF-8 Code Page
+        run: chcp 65001
 
-    # Add  MSBuild to the PATH: https://github.com/microsoft/setup-msbuild
-    - name: Setup MSBuild.exe
-      uses: microsoft/setup-msbuild@v1.0.2
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v1
+        with:
+          nuget-version: '5.0.2'
 
-    # Restore the application to populate the obj folder with RuntimeIdentifiers
-    - name: Restore the application
-      run: msbuild $env:Solution_Name /t:Restore /p:Configuration=$env:Configuration
-      env:
-        Configuration: ${{ matrix.configuration }}
+      - name: Restore Solution
+        run: nuget restore ${{ github.workspace }}/path/to/solution.sln
+        env:
+          NUGET_FEED: ${{ secrets.NUGET_FEED }}
 
+      - name: Build Solution
+        run: |
+          msbuild ${{ github.workspace }}/path/to/solution.sln /p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=false /p:SkipInvalidConfigurations=true /p:PackageLocation="${{ github.workspace }}/output" /p:Configuration=Release
+        env:
+          buildPlatform: 'Any CPU'
+          buildConfiguration: 'Release'
 
+      - name: Archive Build Artifacts
+        run: |
+          $sourceDirectory = "${{ github.workspace }}/output/Archive/Content/"
+          $packageTmpDirectory = Get-ChildItem -Path $sourceDirectory -Recurse -Filter 'PackageTmp' -Directory | Select-Object -First 1
 
-    # Create the app package by building and packaging the Windows Application Packaging project
-    - name: Create the app package
-      run: msbuild $env:Wap_Project_Path /p:Configuration=$env:Configuration /p:UapAppxPackageBuildMode=$env:Appx_Package_Build_Mode /p:AppxBundle=$env:Appx_Bundle /p:PackageCertificateKeyFile=GitHubActionsWorkflow.pfx /p:PackageCertificatePassword=${{ secrets.Pfx_Key }}
-      env:
-        Appx_Bundle: Always
-        Appx_Bundle_Platforms: x86|x64
-        Appx_Package_Build_Mode: StoreUpload
-        Configuration: ${{ matrix.configuration }}
+          if ($null -ne $packageTmpDirectory) {
+              Write-Host "Found PackageTmp directory: $($packageTmpDirectory.FullName)"
+              $archiveFile = "${{ github.workspace }}/output/${{ github.event.repository.name }}.zip"
 
+              # Create the ZIP archive with the contents of PackageTmp
+              Compress-Archive -Path "$($packageTmpDirectory.FullName)/*/" -DestinationPath $archiveFile -Force
+          } else {
+              Write-Host "PackageTmp directory not found."
+              exit 1
+          }
+        shell: pwsh
 
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ github.event.repository.name }}
+          path: ${{ github.workspace }}/output/${{ github.event.repository.name }}.zip
 
-    # Upload the MSIX package: https://github.com/marketplace/actions/upload-a-build-artifact
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: MSIX Package
-        path: ${{ env.Wap_Project_Directory }}\AppPackages
 
